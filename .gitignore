@@ -13,3 +13,4 @@ SECRET_CONFIG
 !.env
 !.env.template
 gcp-*.json
+elastic-it*
