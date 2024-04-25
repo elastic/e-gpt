@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { EmbeddingEndpoint, Embedding } from "../embeddingEndpoints";
+import type { Embedding, EmbeddingEndpoint } from "../embeddingEndpoints";
 import { chunk } from "$lib/utils/chunk";
 import { OPENAI_API_KEY } from "$env/static/private";
 
@@ -30,7 +30,7 @@ export async function embeddingEndpointOpenAI(
 					headers: {
 						Accept: "application/json",
 						"Content-Type": "application/json",
-						...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+						...(apiKey ? { "Api-Key": apiKey } : {}),
 					},
 					body: JSON.stringify({ input: batchInputs, model: model.name }),
 				});
@@ -44,8 +44,6 @@ export async function embeddingEndpointOpenAI(
 			})
 		);
 
-		const flatAllEmbeddings = batchesResults.flat();
-
-		return flatAllEmbeddings;
+		return batchesResults.flat();
 	};
 }
