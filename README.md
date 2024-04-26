@@ -1,47 +1,88 @@
 ---
-title: chat-ui
+title: elastic-gpt
 emoji: 🔥
-colorFrom: purple
-colorTo: purple
+colorFrom: blue
+colorTo: blue
 sdk: docker
 pinned: false
 license: apache-2.0
-base_path: /chat
+base_path: /
 app_port: 3000
 failure_strategy: rollback
 load_balancing_strategy: random
 ---
 
-# Chat UI
+# Elastic-GPT
 
-![Chat UI repository thumbnail](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/chatui-websearch.png)
+<div style="background-color: #f0f0f0; padding: 10px;">
+   <img src="static/elasticgpt/logo-elastic-horizontal.png" alt="Elastic-GPT thumbnail"> 
+</div>
+
+## Quick Start to run Elastic-GPT
+
+### Step 1: Clone the repo and navigate to the directory
+
+```bash
+git clone https://github.com/elastic/e-gpt.git
+cd e-gpt
+```
+
+### Step 2: Get the feature branch
+
+```bash
+git checkout itgpt/feature/mvp-v1
+```
+
+### Step 3: Start Docker, and run MongoDB Locally
+Ensure you have Docker installed and remember to start Docker.
+
+```bash
+docker run -d -p 27017:27017 --name mongo-elastic-gpt mongo:latest
+```
+
+### Step 4: Create the `.env.local` file
+
+```bash
+touch .env.local
+```
+
+Reach out to the IT Engineering team for the content of the `.env.local` file.
+
+### Step 5: Clear the database
+
+```bash
+npm run populate users settings assistants conversations
+```
+
+### Step 6: Run the app
+
+```bash
+npm run dev
+```
+
+### Step 7: Test on port 5173
+
+http://localhost:5173/
+
+<hr />
+
+# About Elastic-GPT
 
 A chat interface using open source models, eg OpenAssistant or Llama. It is a SvelteKit app and it powers the [HuggingChat app on hf.co/chat](https://huggingface.co/chat).
 
-0. [No Setup Deploy](#no-setup-deploy)
 1. [Setup](#setup)
 2. [Launch](#launch)
 3. [Web Search](#web-search)
 4. [Text Embedding Models](#text-embedding-models)
 5. [Extra parameters](#extra-parameters)
-6. [Deploying to a HF Space](#deploying-to-a-hf-space)
-7. [Building](#building)
+6. [Building](#building)
 
-## No Setup Deploy
-
-If you don't want to configure, setup, and launch your own Chat UI yourself, you can use this option as a fast deploy alternative.
-
-You can deploy your own customized Chat UI instance with any supported [LLM](https://huggingface.co/models?pipeline_tag=text-generation&sort=trending) of your choice on [Hugging Face Spaces](https://huggingface.co/spaces). To do so, use the chat-ui template [available here](https://huggingface.co/new-space?template=huggingchat/chat-ui-template).
-
-Set `HF_TOKEN` in [Space secrets](https://huggingface.co/docs/hub/spaces-overview#managing-secrets-and-environment-variables) to deploy a model with gated access or a model in a private repository. It's also compatible with [Inference for PROs](https://huggingface.co/blog/inference-pro) curated list of powerful models with higher rate limits. Make sure to create your personal token first in your [User Access Tokens settings](https://huggingface.co/settings/tokens).
-
-Read the full tutorial [here](https://huggingface.co/docs/hub/spaces-sdks-docker-chatui#chatui-on-spaces).
 
 ## Setup
 
-The default config for Chat UI is stored in the `.env` file. You will need to override some values to get Chat UI to run locally. This is done in `.env.local`.
+The default config for Elastic-GPT is stored in the `.env` file. You will need to override some values to get Elastic-GPT to run locally. This is done in `.env.local`.
 
-Start by creating a `.env.local` file in the root of the repository. The bare minimum config you need to get Chat UI to run locally is the following:
+Start by creating a `.env.local` file in the root of the repository. The bare minimum config you need to get Elastic-GPT to run locally is the following:
 
 ```env
 MONGODB_URL=<the URL to your MongoDB instance>
@@ -50,25 +91,19 @@ HF_TOKEN=<your access token>
 
 ### Database
 
-The chat history is stored in a MongoDB instance, and having a DB instance available is needed for Chat UI to work.
+The chat history is stored in a MongoDB instance, and having a DB instance available is needed for Elastic-GPT to work.
 
 You can use a local MongoDB instance. The easiest way is to spin one up using docker:
 
 ```bash
-docker run -d -p 27017:27017 --name mongo-chatui mongo:latest
+docker run -d -p 27017:27017 --name mongo-elastic-gpt mongo:latest
 ```
 
 In which case the url of your DB will be `MONGODB_URL=mongodb://localhost:27017`.
 
-Alternatively, you can use a [free MongoDB Atlas](https://www.mongodb.com/pricing) instance for this, Chat UI should fit comfortably within their free tier. After which you can set the `MONGODB_URL` variable in `.env.local` to match your instance.
-
-### Hugging Face Access Token
-
-If you use a remote inference endpoint, you will need a Hugging Face access token to run Chat UI locally. You can get one from [your Hugging Face profile](https://huggingface.co/settings/tokens).
-
 ## Launch
 
-After you're done with the `.env.local` file you can run Chat UI locally with:
+After you're done with the `.env.local` file you can run Elastic-GPT locally with:
 
 ```bash
 npm install
@@ -77,7 +112,7 @@ npm run dev
 
 ## Web Search
 
-Chat UI features a powerful Web Search feature. It works by:
+Elastic-GPT features a powerful Web Search feature. It works by:
 
 1. Generating an appropriate search query from the user prompt.
 2. Performing web search and extracting content from webpages.
@@ -121,7 +156,7 @@ TEXT_EMBEDDING_MODELS = `[
 ```
 
 The required fields are `name`, `chunkCharLength` and `endpoints`.
-Supported text embedding backends are: [`transformers.js`](https://huggingface.co/docs/transformers.js), [`TEI`](https://github.com/huggingface/text-embeddings-inference) and [`OpenAI`](https://platform.openai.com/docs/guides/embeddings). `transformers.js` models run locally as part of `chat-ui`, whereas `TEI` models run in a different environment & accessed through an API endpoint. `openai` models are accessed through the [OpenAI API](https://platform.openai.com/docs/guides/embeddings).
+Supported text embedding backends are: [`transformers.js`](https://huggingface.co/docs/transformers.js), [`TEI`](https://github.com/huggingface/text-embeddings-inference) and [`OpenAI`](https://platform.openai.com/docs/guides/embeddings). `transformers.js` models run locally as part of `elastic-gpt`, whereas `TEI` models run in a different environment & accessed through an API endpoint. `openai` models are accessed through the [OpenAI API](https://platform.openai.com/docs/guides/embeddings).
 
 When more than one embedding models are supplied in `.env.local` file, the first will be used by default, and the others will only be used on LLM's which configured `embeddingModel` to the name of the model.
 
@@ -146,7 +181,7 @@ These variables will enable the openID sign-in modal for users.
 
 ### Theming
 
-You can use a few environment variables to customize the look and feel of chat-ui. These are by default:
+You can use a few environment variables to customize the look and feel of elastic-gpt. These are by default:
 
 ```env
 PUBLIC_APP_NAME=ChatUI
@@ -252,7 +287,7 @@ We currently only support IDEFICS as a multimodal model, hosted on TGI. You can 
 
 If you want to, instead of hitting models on the Hugging Face Inference API, you can run your own models locally.
 
-A good option is to hit a [text-generation-inference](https://github.com/huggingface/text-generation-inference) endpoint. This is what is done in the official [Chat UI Spaces Docker template](https://huggingface.co/new-space?template=huggingchat/chat-ui-template) for instance: both this app and a text-generation-inference server run inside the same container.
+A good option is to hit a [text-generation-inference](https://github.com/huggingface/text-generation-inference) endpoint. This is what is done in the official [Elastic-GPT Spaces Docker template](https://huggingface.co/new-space?template=huggingchat/chat-ui-template) for instance: both this app and a text-generation-inference server run inside the same container.
 
 To do this, you can add your own endpoints to the `MODELS` variable in `.env.local`, by adding an `"endpoints"` key for each model in `MODELS`.
 
@@ -270,9 +305,9 @@ If `endpoints` are left unspecified, ChatUI will look for the model on the hoste
 
 ##### OpenAI API compatible models
 
-Chat UI can be used with any API server that supports OpenAI API compatibility, for example [text-generation-webui](https://github.com/oobabooga/text-generation-webui/tree/main/extensions/openai), [LocalAI](https://github.com/go-skynet/LocalAI), [FastChat](https://github.com/lm-sys/FastChat/blob/main/docs/openai_api.md), [llama-cpp-python](https://github.com/abetlen/llama-cpp-python), and [ialacol](https://github.com/chenhunghan/ialacol).
+Elastic-GPT can be used with any API server that supports OpenAI API compatibility, for example [text-generation-webui](https://github.com/oobabooga/text-generation-webui/tree/main/extensions/openai), [LocalAI](https://github.com/go-skynet/LocalAI), [FastChat](https://github.com/lm-sys/FastChat/blob/main/docs/openai_api.md), [llama-cpp-python](https://github.com/abetlen/llama-cpp-python), and [ialacol](https://github.com/chenhunghan/ialacol).
 
-The following example config makes Chat UI works with [text-generation-webui](https://github.com/oobabooga/text-generation-webui/tree/main/extensions/openai), the `endpoint.baseUrl` is the url of the OpenAI API compatible server, this overrides the baseUrl to be used by OpenAI instance. The `endpoint.completion` determine which endpoint to be used, default is `chat_completions` which uses `v1/chat/completions`, change to `endpoint.completion` to `completions` to use the `v1/completions` endpoint.
+The following example config makes Elastic-GPT works with [text-generation-webui](https://github.com/oobabooga/text-generation-webui/tree/main/extensions/openai), the `endpoint.baseUrl` is the url of the OpenAI API compatible server, this overrides the baseUrl to be used by OpenAI instance. The `endpoint.completion` determine which endpoint to be used, default is `chat_completions` which uses `v1/chat/completions`, change to `endpoint.completion` to `completions` to use the `v1/completions` endpoint.
 
 ```
 MODELS=`[
@@ -389,42 +424,6 @@ MODELS=`[{
 }]`
 ```
 
-##### Llama.cpp API server
-
-chat-ui also supports the llama.cpp API server directly without the need for an adapter. You can do this using the `llamacpp` endpoint type.
-
-If you want to run chat-ui with llama.cpp, you can do the following, using Zephyr as an example model:
-
-1. Get [the weights](https://huggingface.co/TheBloke/zephyr-7B-beta-GGUF/tree/main) from the hub
-2. Run the server with the following command: `./server -m models/zephyr-7b-beta.Q4_K_M.gguf -c 2048 -np 3`
-3. Add the following to your `.env.local`:
-
-```env
-MODELS=`[
-  {
-      "name": "Local Zephyr",
-      "chatPromptTemplate": "<|system|>\n{{preprompt}}</s>\n{{#each messages}}{{#ifUser}}<|user|>\n{{content}}</s>\n<|assistant|>\n{{/ifUser}}{{#ifAssistant}}{{content}}</s>\n{{/ifAssistant}}{{/each}}",
-      "parameters": {
-        "temperature": 0.1,
-        "top_p": 0.95,
-        "repetition_penalty": 1.2,
-        "top_k": 50,
-        "truncate": 1000,
-        "max_new_tokens": 2048,
-        "stop": ["</s>"]
-      },
-      "endpoints": [
-        {
-         "url": "http://127.0.0.1:8080",
-         "type": "llamacpp"
-        }
-      ]
-  }
-]`
-```
-
-Start chat-ui with `npm run dev` and you should be able to chat with Zephyr locally.
-
 #### Ollama
 
 We also support the Ollama inference server. Spin up a model with
@@ -507,7 +506,7 @@ MODELS=`[
 
 #### Amazon
 
-You can also specify your Amazon SageMaker instance as an endpoint for chat-ui. The config goes like this:
+You can also specify your Amazon SageMaker instance as an endpoint for elastic-gpt. The config goes like this:
 
 ```env
 "endpoints": [
@@ -529,41 +528,9 @@ You can also set `"service" : "lambda"` to use a lambda instance.
 
 You can get the `accessKey` and `secretKey` from your AWS user, under programmatic access.
 
-#### Cloudflare Workers AI
-
-You can also use Cloudflare Workers AI to run your own models with serverless inference.
-
-You will need to have a Cloudflare account, then get your [account ID](https://developers.cloudflare.com/fundamentals/setup/find-account-and-zone-ids/) as well as your [API token](https://developers.cloudflare.com/workers-ai/get-started/rest-api/#1-get-an-api-token) for Workers AI.
-
-You can either specify them directly in your `.env.local` using the `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` variables, or you can set them directly in the endpoint config.
-
-You can find the list of models available on Cloudflare [here](https://developers.cloudflare.com/workers-ai/models/#text-generation).
-
-```env
-  {
-  "name" : "nousresearch/hermes-2-pro-mistral-7b",
-  "tokenizer": "nousresearch/hermes-2-pro-mistral-7b",
-  "parameters": {
-    "stop": ["<|im_end|>"]
-  },
-  "endpoints" : [
-    {
-      "type" : "cloudflare"
-      <!-- optionally specify these
-      "accountId": "your-account-id",
-      "authToken": "your-api-token"
-      -->
-    }
-  ]
-}
-```
-
-> [!NOTE]  
-> Cloudlare Workers AI currently do not support custom sampling parameters like temperature, top_p, etc.
-
 #### Cohere
 
-You can also use Cohere to run their models directly from chat-ui. You will need to have a Cohere account, then get your [API token](https://dashboard.cohere.com/api-keys). You can either specify it directly in your `.env.local` using the `COHERE_API_TOKEN` variable, or you can set it in the endpoint config.
+You can also use Cohere to run their models directly from elastic-gpt. You will need to have a Cohere account, then get your [API token](https://dashboard.cohere.com/api-keys). You can either specify it directly in your `.env.local` using the `COHERE_API_TOKEN` variable, or you can set it in the endpoint config.
 
 Here is an example of a Cohere model config. You can set which model you want to use by setting the `id` field to the model name.
 
@@ -585,7 +552,7 @@ Here is an example of a Cohere model config. You can set which model you want to
 
 ##### Google Vertex models
 
-Chat UI can connect to the google Vertex API endpoints ([List of supported models](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models)).
+Elastic-GPT can connect to the google Vertex API endpoints ([List of supported models](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models)).
 
 To enable:
 
@@ -690,11 +657,11 @@ If the model being hosted will be available on multiple servers/instances add th
 
 #### Client Certificate Authentication (mTLS)
 
-Custom endpoints may require client certificate authentication, depending on how you configure them. To enable mTLS between Chat UI and your custom endpoint, you will need to set the `USE_CLIENT_CERTIFICATE` to `true`, and add the `CERT_PATH` and `KEY_PATH` parameters to your `.env.local`. These parameters should point to the location of the certificate and key files on your local machine. The certificate and key files should be in PEM format. The key file can be encrypted with a passphrase, in which case you will also need to add the `CLIENT_KEY_PASSWORD` parameter to your `.env.local`.
+Custom endpoints may require client certificate authentication, depending on how you configure them. To enable mTLS between Elastic-GPT and your custom endpoint, you will need to set the `USE_CLIENT_CERTIFICATE` to `true`, and add the `CERT_PATH` and `KEY_PATH` parameters to your `.env.local`. These parameters should point to the location of the certificate and key files on your local machine. The certificate and key files should be in PEM format. The key file can be encrypted with a passphrase, in which case you will also need to add the `CLIENT_KEY_PASSWORD` parameter to your `.env.local`.
 
 If you're using a certificate signed by a private CA, you will also need to add the `CA_PATH` parameter to your `.env.local`. This parameter should point to the location of the CA certificate file on your local machine.
 
-If you're using a self-signed certificate, e.g. for testing or development purposes, you can set the `REJECT_UNAUTHORIZED` parameter to `false` in your `.env.local`. This will disable certificate validation, and allow Chat UI to connect to your custom endpoint.
+If you're using a self-signed certificate, e.g. for testing or development purposes, you can set the `REJECT_UNAUTHORIZED` parameter to `false` in your `.env.local`. This will disable certificate validation, and allow Elastic-GPT to connect to your custom endpoint.
 
 #### Specific Embedding Model
 
@@ -734,10 +701,6 @@ MODELS=`[
   }
 ]`
 ```
-
-## Deploying to a HF Space
-
-Create a `DOTENV_LOCAL` secret to your HF space with the content of your .env.local, and they will be picked up automatically when you run.
 
 ## Building
 
@@ -788,7 +751,7 @@ SERPER_API_KEY=<your serper API key from step 3>
 MESSAGES_BEFORE_LOGIN=<can be any numerical value, or set to 0 to require login>
 ```
 
-You can then run `npm run updateLocalEnv` in the root of chat-ui. This will create a `.env.local` file which combines the `.env.template` and the `.env.SECRET_CONFIG` file. You can then run `npm run dev` to start your local instance of HuggingChat.
+You can then run `npm run updateLocalEnv` in the root of e-gpt. This will create a `.env.local` file which combines the `.env.template` and the `.env.SECRET_CONFIG` file. You can then run `npm run dev` to start your local instance of HuggingChat.
 
 ### Populate database
 
