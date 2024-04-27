@@ -22,9 +22,11 @@ import { checkAndRunMigrations } from "$lib/migrations/migrations";
 import { building } from "$app/environment";
 import { refreshAssistantsCounts } from "$lib/assistantStats/refresh-assistants-counts";
 
-import apm from '$lib/server/apmSingleton';
+import apm from "$lib/server/apmSingleton";
 
-console.log("APM agent started:", apm.isStarted());
+console.log("APM Started:\t", apm.isStarted());
+
+const spanTypeName = "hooks_server_ts";
 
 if (!building) {
 	await checkAndRunMigrations();
@@ -34,9 +36,8 @@ if (!building) {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-	if (event.url.pathname.startsWith(`${base}/api/`) && EXPOSE_API !== "true") {
-		return new Response("API is disabled", { status: 403 });
-	}
+	const transactionName = `${event.request.method} ${event.url.pathname}`;
+	const transaction = apm.startTransaction(transactionName, "request");
 
 	function errorResponse(status: number, message: string) {
 		const sendJson =
@@ -50,6 +51,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 		});
 	}
 
+	const apiDisabledSpan = transaction.startSpan("API Disabled Check", spanTypeName);
+	if (event.url.pathname.startsWith(`${base}/api/`) && EXPOSE_API !== "true") {
+		return new Response("API is disabled", { status: 403 });
+	}
+	apiDisabledSpan?.end();
+
+	const adminApiSpan = transaction.startSpan("Admin API Check", spanTypeName);
 	if (event.url.pathname.startsWith(`${base}/admin/`) || event.url.pathname === `${base}/admin`) {
 		const ADMIN_SECRET = ADMIN_API_SECRET || PARQUET_EXPORT_SECRET;
 
@@ -61,7 +69,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 			return errorResponse(401, "Unauthorized");
 		}
 	}
+	adminApiSpan?.end();
 
+	const sessionCreationSpan = transaction.startSpan("Session Creation", spanTypeName);
 	const token = event.cookies.get(COOKIE_NAME);
 
 	let secretSessionId: string;
@@ -87,8 +97,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	event.locals.sessionId = sessionId;
+	sessionCreationSpan?.end();
 
 	// CSRF protection
+	const csrfSpan = transaction.startSpan("CSRF Protection", spanTypeName);
+
 	const requestContentType = event.request.headers.get("content-type")?.split(";")[0] ?? "";
 	/** https://developer.mozilla.org/en-US/docs/Web/HTML/Element/form#attr-enctype */
 	const nativeFormContentTypes = [
@@ -117,8 +130,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 			}
 		}
 	}
+	csrfSpan?.end();
 
 	if (event.request.method === "POST") {
+		const refreshSpan = transaction.startSpan("Refresh Session Cookie", spanTypeName);
 		// if the request is a POST request we refresh the cookie
 		refreshSessionCookie(event.cookies, secretSessionId);
 
@@ -126,8 +141,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 			{ sessionId },
 			{ $set: { updatedAt: new Date(), expiresAt: addWeeks(new Date(), 2) } }
 		);
+		refreshSpan?.end();
 	}
 
+	const requiresUserSpan = transaction.startSpan(" Requires User Check", spanTypeName);
 	if (
 		!event.url.pathname.startsWith(`${base}/login`) &&
 		!event.url.pathname.startsWith(`${base}/admin`) &&
@@ -160,8 +177,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 	}
 
+	requiresUserSpan?.end();
+
 	let replaced = false;
 
+	const responseSpan = transaction.startSpan("Resolve Event", spanTypeName);
 	const response = await resolve(event, {
 		transformPageChunk: (chunk) => {
 			// For some reason, Sveltekit doesn't let us load env variables from .env in the app.html template
@@ -173,6 +193,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 			return chunk.html.replace("%gaId%", PUBLIC_GOOGLE_ANALYTICS_ID);
 		},
 	});
+
+	responseSpan?.end();
+
+	transaction.end();
 
 	return response;
 };

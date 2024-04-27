@@ -9,7 +9,6 @@ import endpointVertex, { endpointVertexParametersSchema } from "./google/endpoin
 
 import type { Model } from "$lib/types/Model";
 
-
 // parameters passed when generating text
 export interface EndpointParameters {
 	messages: Omit<Conversation["messages"][0], "id">[];

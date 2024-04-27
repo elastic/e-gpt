@@ -5,7 +5,7 @@ import { buildPrompt } from "$lib/buildPrompt";
 import { OPENAI_API_KEY } from "$env/static/private";
 import type { Endpoint } from "../endpoints";
 
-import apm from '$lib/server/apmSingleton';
+import apm from "$lib/server/apmSingleton";
 import handleError from "$lib/server/apmHandleError";
 
 export const endpointOAIParametersSchema = z.object({
@@ -50,7 +50,7 @@ export async function endpointOai(
 			});
 
 			const parameters = { ...model.parameters, ...generateSettings };
-			const span = apm.startSpan('OpenAI Completions API Call');
+			const span = apm.startSpan("OpenAI Completions API Call");
 
 			try {
 				const result = await openai.completions.create({
@@ -68,7 +68,7 @@ export async function endpointOai(
 				handleError(error, span, "Error during OpenAI Completions API Call");
 				throw error;
 			} finally {
-				if (span) span.end();  // Ensure to end the span if it wasn't ended in handleError
+				if (span) span.end(); // Ensure to end the span if it wasn't ended in handleError
 			}
 		};
 	} else if (completion === "chat_completions") {
@@ -87,7 +87,7 @@ export async function endpointOai(
 			}
 
 			const parameters = { ...model.parameters, ...generateSettings };
-			const span = apm.startSpan('OpenAI Chat Completions API Call');
+			const span = apm.startSpan("OpenAI Chat Completions API Call");
 
 			try {
 				const result = await openai.chat.completions.create({

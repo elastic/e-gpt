@@ -3,11 +3,10 @@ import { authCondition } from "$lib/server/auth";
 import { z } from "zod";
 import { ObjectId } from "mongodb";
 
-import apm from '$lib/server/apmSingleton';
-import handleError from '$lib/server/apmHandleError';
+import apm from "$lib/server/apmSingleton";
+import handleError from "$lib/server/apmHandleError";
 
 export async function GET({ locals, params }) {
-
 	const transaction = apm.startTransaction("GET Conversation");
 	try {
 		const id = z.string().parse(params.id);
@@ -17,7 +16,7 @@ export async function GET({ locals, params }) {
 			// Log unauthorized access attempts
 			const error = new Error("Unauthorized: Must have session cookie");
 			handleError(error, transaction, "Unauthorized access attempt");
-			transaction?.end('error');
+			transaction?.end("error");
 			return Response.json({ message: error.message }, { status: 401 });
 		}
 
@@ -30,7 +29,7 @@ export async function GET({ locals, params }) {
 			// Log not found errors
 			const error = new Error("Not Found: Conversation not found");
 			handleError(error, transaction, "Failed to find conversation");
-			transaction?.end('error');
+			transaction?.end("error");
 			return Response.json({ message: error.message }, { status: 404 });
 		}
 
@@ -49,15 +48,14 @@ export async function GET({ locals, params }) {
 			})),
 		};
 
-		transaction?.end('success');
+		transaction?.end("success");
 		return Response.json(res);
-
 	} catch (error) {
 		handleError(error, transaction, "Error fetching conversation data");
-		throw error;  // Rethrow the error after logging it
+		throw error; // Rethrow the error after logging it
 	} finally {
 		if (transaction) {
-			transaction.end('failure');
+			transaction.end("failure");
 		}
 	}
 }

@@ -1,4 +1,4 @@
-import apm from '$lib/server/apmSingleton';
+import apm from "$lib/server/apmSingleton";
 
 /**
  * Handles errors by logging them to the Elastic APM and ending the span if provided.
@@ -7,7 +7,11 @@ import apm from '$lib/server/apmSingleton';
  * @param span Optional span that might be used for APM tracing, can be null.
  * @param customMessage Optional message to provide additional context for the error.
  */
-function handleError(error: unknown, span?: { end: () => void } | null, customMessage?: string): void {
+function handleError(
+	error: unknown,
+	span?: { end: () => void } | null,
+	customMessage?: string
+): void {
 	if (!apm.isStarted()) {
 		return;
 	}

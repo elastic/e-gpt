@@ -34,6 +34,7 @@ git checkout itgpt/feature/mvp-v1
 ```
 
 ### Step 3: Start Docker, and run MongoDB Locally
+
 Ensure you have Docker installed and remember to start Docker.
 
 ```bash
@@ -76,7 +77,6 @@ A chat interface using open source models, eg OpenAssistant or Llama. It is a Sv
 4. [Text Embedding Models](#text-embedding-models)
 5. [Extra parameters](#extra-parameters)
 6. [Building](#building)
-
 
 ## Setup
 
