@@ -7,16 +7,16 @@ import { MONGODB_URL } from "$env/static/private";
 import { faker } from "@faker-js/faker";
 import { ObjectId } from "mongodb";
 
-import { collections } from "../src/lib/server/database.ts";
-import { models } from "../src/lib/server/models.ts";
+import { collections } from "../src/lib/server/database";
+import { models } from "../src/lib/server/models";
 import type { User } from "../src/lib/types/User";
 import type { Assistant } from "../src/lib/types/Assistant";
 import type { Conversation } from "../src/lib/types/Conversation";
 import type { Settings } from "../src/lib/types/Settings";
-import { defaultEmbeddingModel } from "../src/lib/server/embeddingModels.ts";
-import { Message } from "../src/lib/types/Message.ts";
+import { defaultEmbeddingModel } from "../src/lib/server/embeddingModels";
+import { Message } from "../src/lib/types/Message";
 
-import { addChildren } from "../src/lib/utils/tree/addChildren.ts";
+import { addChildren } from "../src/lib/utils/tree/addChildren";
 
 const rl = readline.createInterface({
 	input: process.stdin,

@@ -48,10 +48,10 @@ touch .env.local
 
 Reach out to the IT Engineering team for the content of the `.env.local` file.
 
-### Step 5: Clear the database
+### Step 5: Clear the database [OPTIONAL]
 
 ```bash
-npm run populate users settings assistants conversations
+npm run populate reset
 ```
 
 ### Step 6: Run the app

@@ -22,6 +22,10 @@ import { checkAndRunMigrations } from "$lib/migrations/migrations";
 import { building } from "$app/environment";
 import { refreshAssistantsCounts } from "$lib/assistantStats/refresh-assistants-counts";
 
+import apm from '$lib/server/apmSingleton';
+
+console.log("APM agent started:", apm.isStarted());
+
 if (!building) {
 	await checkAndRunMigrations();
 	if (ENABLE_ASSISTANTS) {
