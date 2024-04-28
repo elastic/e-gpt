@@ -7,10 +7,14 @@ import apm from "$lib/server/apmSingleton";
 import handleError from "$lib/server/apmHandleError";
 
 export async function GET({ locals, params }) {
-	const transaction = apm.startTransaction("GET Conversation");
+	const transaction = apm.startTransaction("GET /api/conversation/[id]/+server", "request");
+	transaction.setLabel("sessionID", locals.sessionId);
+	transaction.setLabel("userEmail", locals.user?.email);
 	try {
 		const id = z.string().parse(params.id);
 		const convId = new ObjectId(id);
+
+		transaction.setLabel("conversationId", id);
 
 		if (!locals.user?._id && !locals.sessionId) {
 			// Log unauthorized access attempts
@@ -51,11 +55,7 @@ export async function GET({ locals, params }) {
 		transaction?.end("success");
 		return Response.json(res);
 	} catch (error) {
-		handleError(error, transaction, "Error fetching conversation data");
+		handleError(error, transaction, "Failed to get conversation");
 		throw error; // Rethrow the error after logging it
-	} finally {
-		if (transaction) {
-			transaction.end("failure");
-		}
 	}
 }

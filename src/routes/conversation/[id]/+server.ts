@@ -24,7 +24,15 @@ import { preprocessMessages } from "$lib/server/preprocessMessages.js";
 import { usageLimits } from "$lib/server/usageLimits";
 import { isURLLocal } from "$lib/server/isURLLocal.js";
 
+import apm from "$lib/server/apmSingleton";
+const spanTypeName = "id+server_ts";
+
 export async function POST({ request, locals, params, getClientAddress }) {
+	const postTransaction = apm.startTransaction("POST /conversation/[id]/+server", "request");
+	apm.setLabel("sessionID", locals.sessionId);
+	apm.setLabel("userEmail", locals.user?.email);
+	apm.setLabel("conversationId", params.id);
+
 	const id = z.string().parse(params.id);
 	const convId = new ObjectId(id);
 	const promptedAt = new Date();
@@ -33,15 +41,22 @@ export async function POST({ request, locals, params, getClientAddress }) {
 
 	// check user
 	if (!userId) {
+		apm.captureError(new Error("Unauthorized"));
 		throw error(401, "Unauthorized");
 	}
 
+	const userAccessCheckSpan = postTransaction.startSpan("User Access Check", spanTypeName);
 	// check if the user has access to the conversation
 	const convBeforeCheck = await collections.conversations.findOne({
 		_id: convId,
 		...authCondition(locals),
 	});
+	userAccessCheckSpan?.end();
 
+	const convertLegacyConversationSpan = postTransaction.startSpan(
+		"Convert Legacy Conversation",
+		spanTypeName
+	);
 	if (convBeforeCheck && !convBeforeCheck.rootMessageId) {
 		const res = await collections.conversations.updateOne(
 			{
@@ -56,9 +71,11 @@ export async function POST({ request, locals, params, getClientAddress }) {
 		);
 
 		if (!res.acknowledged) {
+			apm.captureError(new Error("Failed to convert conversation"));
 			throw error(500, "Failed to convert conversation");
 		}
 	}
+	convertLegacyConversationSpan?.end();
 
 	const conv = await collections.conversations.findOne({
 		_id: convId,
@@ -66,19 +83,23 @@ export async function POST({ request, locals, params, getClientAddress }) {
 	});
 
 	if (!conv) {
+		apm.captureError(new Error("Conversation not found"));
 		throw error(404, "Conversation not found");
 	}
 
 	// register the event for ratelimiting
+	const rateLimitEvent = postTransaction.startSpan("Rate Limit Event", spanTypeName);
 	await collections.messageEvents.insertOne({
 		userId,
 		createdAt: new Date(),
 		ip: getClientAddress(),
 	});
+	rateLimitEvent?.end();
 
 	const messagesBeforeLogin = MESSAGES_BEFORE_LOGIN ? parseInt(MESSAGES_BEFORE_LOGIN) : 0;
 
 	// guest mode check
+	const guestModeCheckSpan = postTransaction.startSpan("Guest Mode Check", spanTypeName);
 	if (!locals.user?._id && requiresUser && messagesBeforeLogin) {
 		const totalMessages =
 			(
@@ -98,7 +119,9 @@ export async function POST({ request, locals, params, getClientAddress }) {
 			throw error(429, "Exceeded number of messages before login");
 		}
 	}
+	guestModeCheckSpan?.end();
 
+	const usageLimitsCheckSpan = postTransaction.startSpan("Usage Limits Check", spanTypeName);
 	if (usageLimits?.messagesPerMinute) {
 		// check if the user is rate limited
 		const nEvents = Math.max(
@@ -106,24 +129,34 @@ export async function POST({ request, locals, params, getClientAddress }) {
 			await collections.messageEvents.countDocuments({ ip: getClientAddress() })
 		);
 		if (nEvents > usageLimits.messagesPerMinute) {
+			apm.captureError(new Error(ERROR_MESSAGES.rateLimited));
 			throw error(429, ERROR_MESSAGES.rateLimited);
 		}
 	}
 
 	if (usageLimits?.messages && conv.messages.length > usageLimits.messages) {
+		apm.captureError(
+			new Error(
+				`This conversation has more than ${usageLimits.messages} messages. Start a new one to continue`
+			)
+		);
 		throw error(
 			429,
 			`This conversation has more than ${usageLimits.messages} messages. Start a new one to continue`
 		);
 	}
+	usageLimitsCheckSpan?.end();
 
 	// fetch the model
+	const findModelSpan = postTransaction.startSpan("Find Model", spanTypeName);
 	const model = models.find((m) => m.id === conv.model);
 
 	if (!model) {
 		throw error(410, "Model not available anymore");
 	}
+	findModelSpan?.end();
 
+	const parseRequestSpan = postTransaction.startSpan("Parse Request", spanTypeName);
 	// finally parse the content of the request
 	const json = await request.json();
 
@@ -152,11 +185,14 @@ export async function POST({ request, locals, params, getClientAddress }) {
 		.parse(json);
 
 	if (usageLimits?.messageLength && (newPrompt?.length ?? 0) > usageLimits.messageLength) {
+		apm.captureError(new Error("Message too long"));
 		throw error(400, "Message too long.");
 	}
+	parseRequestSpan?.end();
+
 	// files is an array of base64 strings encoding Blob objects
 	// we need to convert this array to an array of File objects
-
+	const fileSpan = postTransaction.startSpan("File Conversion", spanTypeName);
 	const files = b64files?.map((file) => {
 		const blob = Buffer.from(file, "base64");
 		return new File([blob], "image.png");
@@ -176,6 +212,7 @@ export async function POST({ request, locals, params, getClientAddress }) {
 		);
 
 		if (filechecks.some((check) => check)) {
+			apm.captureError(new Error("File too large, should be <2MB and 224x224 max."));
 			throw error(413, "File too large, should be <2MB and 224x224 max.");
 		}
 	}
@@ -185,8 +222,10 @@ export async function POST({ request, locals, params, getClientAddress }) {
 	if (files) {
 		hashes = await Promise.all(files.map(async (file) => await uploadFile(file, conv)));
 	}
+	fileSpan?.end();
 
 	// we will append tokens to the content of this message
+	const messageWriteSpan = postTransaction.startSpan("Message Write", spanTypeName);
 	let messageToWriteToId: Message["id"] | undefined = undefined;
 	// used for building the prompt, subtree of the conversation that goes from the latest message to the root
 	let messagesForPrompt: Message[] = [];
@@ -195,6 +234,7 @@ export async function POST({ request, locals, params, getClientAddress }) {
 		// if it's the last message and we continue then we build the prompt up to the last message
 		// we will strip the end tokens afterwards when the prompt is built
 		if ((conv.messages.find((msg) => msg.id === messageId)?.children?.length ?? 0) > 0) {
+			apm.captureError(new Error("Can only continue the last message"));
 			throw error(400, "Can only continue the last message");
 		}
 		messageToWriteToId = messageId;
@@ -205,15 +245,18 @@ export async function POST({ request, locals, params, getClientAddress }) {
 		// if we're retrying on an assistant message, newPrompt cannot be set
 		// it means we're retrying the last assistant message for a new answer
 
+		const retryMessageSpan = postTransaction.startSpan("Retry Message", spanTypeName);
 		const messageToRetry = conv.messages.find((message) => message.id === messageId);
 
 		if (!messageToRetry) {
+			apm.captureError(new Error("Message not found"));
 			throw error(404, "Message not found");
 		}
 
 		if (messageToRetry.from === "user" && newPrompt) {
 			// add a sibling to this message from the user, with the alternative prompt
 			// add a children to that sibling, where we can write to
+			const userMessageRetrySpan = postTransaction.startSpan("User Message Retry", spanTypeName);
 			const newUserMessageId = addSibling(
 				conv,
 				{ from: "user", content: newPrompt, createdAt: new Date(), updatedAt: new Date() },
@@ -231,7 +274,12 @@ export async function POST({ request, locals, params, getClientAddress }) {
 				newUserMessageId
 			);
 			messagesForPrompt = buildSubtree(conv, newUserMessageId);
+			userMessageRetrySpan?.end();
 		} else if (messageToRetry.from === "assistant") {
+			const assistantMessageRetrySpan = postTransaction.startSpan(
+				"Assistant Message Retry",
+				spanTypeName
+			);
 			// we're retrying an assistant message, to generate a new answer
 			// just add a sibling to the assistant answer where we can write to
 			messageToWriteToId = addSibling(
@@ -241,8 +289,11 @@ export async function POST({ request, locals, params, getClientAddress }) {
 			);
 			messagesForPrompt = buildSubtree(conv, messageId);
 			messagesForPrompt.pop(); // don't need the latest assistant message in the prompt since we're retrying it
+			assistantMessageRetrySpan?.end();
 		}
+		retryMessageSpan?.end();
 	} else {
+		const normalMessageSpan = postTransaction.startSpan("Normal Message", spanTypeName);
 		// just a normal linear conversation, so we add the user message
 		// and the blank assistant message back to back
 		const newUserMessageId = addChildren(
@@ -269,13 +320,17 @@ export async function POST({ request, locals, params, getClientAddress }) {
 		);
 		// build the prompt from the user message
 		messagesForPrompt = buildSubtree(conv, newUserMessageId);
+		normalMessageSpan?.end();
 	}
 
+	const writeMessageSpan = postTransaction.startSpan("Write Message", spanTypeName);
 	const messageToWriteTo = conv.messages.find((message) => message.id === messageToWriteToId);
 	if (!messageToWriteTo) {
+		apm.captureError(new Error("Message not found"));
 		throw error(500, "Failed to create message");
 	}
 	if (messagesForPrompt.length === 0) {
+		apm.captureError(new Error("Prompt not found"));
 		throw error(500, "Failed to create prompt");
 	}
 
@@ -292,9 +347,12 @@ export async function POST({ request, locals, params, getClientAddress }) {
 			},
 		}
 	);
+	writeMessageSpan?.end();
+	messageWriteSpan?.end();
 
 	let doneStreaming = false;
 
+	const streamSpan = postTransaction.startSpan("Streaming", spanTypeName);
 	// we now build the stream
 	const stream = new ReadableStream({
 		async start(controller) {
@@ -317,6 +375,7 @@ export async function POST({ request, locals, params, getClientAddress }) {
 
 			update({ type: "status", status: "started" });
 
+			const summarizeSpan = postTransaction.startSpan("Summarize", spanTypeName);
 			const summarizeIfNeeded = (async () => {
 				if (conv.title === "New Chat" && conv.messages.length === 3) {
 					try {
@@ -350,8 +409,13 @@ export async function POST({ request, locals, params, getClientAddress }) {
 					},
 				}
 			);
+			summarizeSpan?.end();
 
 			// check if assistant has a rag
+			const assistantParamCheckSpan = postTransaction.startSpan(
+				"Assistant Parameters Check",
+				spanTypeName
+			);
 			const assistant = await collections.assistants.findOne<
 				Pick<Assistant, "rag" | "dynamicPrompt" | "generateSettings">
 			>(
@@ -379,6 +443,7 @@ export async function POST({ request, locals, params, getClientAddress }) {
 					assistant?.rag
 				);
 			}
+			assistantParamCheckSpan?.end();
 
 			let preprompt = conv.preprompt;
 
@@ -542,6 +607,8 @@ export async function POST({ request, locals, params, getClientAddress }) {
 		},
 	});
 
+	streamSpan?.end();
+
 	if (conv.assistantId) {
 		await collections.assistantStats.updateOne(
 			{ assistantId: conv.assistantId, "date.at": startOfHour(new Date()), "date.span": "hour" },
@@ -549,6 +616,8 @@ export async function POST({ request, locals, params, getClientAddress }) {
 			{ upsert: true }
 		);
 	}
+
+	postTransaction?.end();
 
 	// Todo: maybe we should wait for the message to be saved before ending the response - in case of errors
 	return new Response(stream, {
@@ -559,38 +628,58 @@ export async function POST({ request, locals, params, getClientAddress }) {
 }
 
 export async function DELETE({ locals, params }) {
+	const deleteTransaction = apm.startTransaction("DELETE conversation/[id]/+server", "request");
 	const convId = new ObjectId(params.id);
 
+	apm.setLabel("sessionID", locals.sessionId);
+	apm.setLabel("userEmail", locals.user?.email);
+	apm.setLabel("conversationId", convId.toString());
+
+	const findConversationSpan = deleteTransaction.startSpan("Find Conversation", spanTypeName);
 	const conv = await collections.conversations.findOne({
 		_id: convId,
 		...authCondition(locals),
 	});
 
 	if (!conv) {
+		apm.captureError(new Error("Conversation not found"));
 		throw error(404, "Conversation not found");
 	}
+	findConversationSpan?.end();
 
+	const deleteConversationSpan = deleteTransaction.startSpan("Delete Conversation", spanTypeName);
 	await collections.conversations.deleteOne({ _id: conv._id });
+	deleteConversationSpan?.end();
 
 	return new Response();
 }
 
 export async function PATCH({ request, locals, params }) {
+	const patchTransaction = apm.startTransaction("PATCH conversation/[id]/+server", "request");
+
 	const { title } = z
 		.object({ title: z.string().trim().min(1).max(100) })
 		.parse(await request.json());
 
 	const convId = new ObjectId(params.id);
 
+	apm.setLabel("sessionID", locals.sessionId);
+	apm.setLabel("userEmail", locals.user?.email);
+	apm.setLabel("conversationId", convId.toString());
+
+	const findConversationSpan = patchTransaction.startSpan("Find Conversation", spanTypeName);
 	const conv = await collections.conversations.findOne({
 		_id: convId,
 		...authCondition(locals),
 	});
 
 	if (!conv) {
+		apm.captureError(new Error("Conversation not found"));
 		throw error(404, "Conversation not found");
 	}
+	findConversationSpan?.end();
 
+	const updateConversationSpan = patchTransaction.startSpan("Update Conversation", spanTypeName);
 	await collections.conversations.updateOne(
 		{
 			_id: convId,
@@ -601,6 +690,7 @@ export async function PATCH({ request, locals, params }) {
 			},
 		}
 	);
+	updateConversationSpan?.end();
 
 	return new Response();
 }
