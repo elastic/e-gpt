@@ -11,7 +11,15 @@ import { v4 } from "uuid";
 import { authCondition } from "$lib/server/auth";
 import { usageLimits } from "$lib/server/usageLimits";
 
+import apm from "$lib/server/apmSingleton";
+const spanTypeName = "server_ts";
+
 export const POST: RequestHandler = async ({ locals, request }) => {
+	const transaction = apm.startTransaction("POST /conversation/+server", "request");
+	const parseSpan = transaction.startSpan("Parse Request", spanTypeName);
+	apm.setLabel("sessionID", locals.sessionId);
+	apm.setLabel("userEmail", locals.user?.email);
+
 	const body = await request.text();
 
 	let title = "";
@@ -29,7 +37,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(400, "Invalid request");
 	}
 	const values = parsedBody.data;
+	parseSpan?.end();
 
+	const usageLimitSpan = transaction.startSpan("Check Usage Limits", spanTypeName);
 	const convCount = await collections.conversations.countDocuments(authCondition(locals));
 
 	if (usageLimits?.conversations && convCount > usageLimits?.conversations) {
@@ -38,12 +48,16 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			"You have reached the maximum number of conversations. Delete some to continue."
 		);
 	}
+	usageLimitSpan?.end();
 
+	const findModelSpan = transaction.startSpan("Find Model", spanTypeName);
 	const model = models.find((m) => (m.id || m.name) === values.model);
 
 	if (!model) {
+		apm.captureError(new Error("Invalid model"));
 		throw error(400, "Invalid model");
 	}
+	findModelSpan?.end();
 
 	let messages: Message[] = [
 		{
@@ -60,12 +74,14 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	let rootMessageId: Message["id"] = messages[0].id;
 	let embeddingModel: string;
 
+	const createConversationSpan = transaction.startSpan("Create Conversation", spanTypeName);
 	if (values.fromShare) {
 		const conversation = await collections.sharedConversations.findOne({
 			_id: values.fromShare,
 		});
 
 		if (!conversation) {
+			apm.captureError(new Error("Conversation not found"));
 			throw error(404, "Conversation not found");
 		}
 
@@ -81,6 +97,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	embeddingModel ??= model.embeddingModel ?? defaultEmbeddingModel.name;
 
 	if (model.unlisted) {
+		apm.captureError(new Error("Can't start a conversation with an unlisted model"));
 		throw error(400, "Can't start a conversation with an unlisted model");
 	}
 
@@ -114,6 +131,11 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		...(locals.user ? { userId: locals.user._id } : { sessionId: locals.sessionId }),
 		...(values.fromShare ? { meta: { fromShareId: values.fromShare } } : {}),
 	});
+
+	createConversationSpan?.setLabel("conversationId", res.insertedId.toString());
+	createConversationSpan?.end();
+
+	transaction.end();
 
 	return new Response(
 		JSON.stringify({

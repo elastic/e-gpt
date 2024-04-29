@@ -5,6 +5,9 @@ import { buildPrompt } from "$lib/buildPrompt";
 import { OPENAI_API_KEY } from "$env/static/private";
 import type { Endpoint } from "../endpoints";
 
+import apm from "$lib/server/apmSingleton";
+import handleError from "$lib/server/apmHandleError";
+
 export const endpointOAIParametersSchema = z.object({
 	weight: z.number().int().positive().default(1),
 	model: z.any(),
@@ -47,9 +50,10 @@ export async function endpointOai(
 			});
 
 			const parameters = { ...model.parameters, ...generateSettings };
+			const span = apm.startSpan("OpenAI Completions API Call");
 
-			return openAICompletionToTextGenerationStream(
-				await openai.completions.create({
+			try {
+				const result = await openai.completions.create({
 					model: model.id ?? model.name,
 					prompt,
 					stream: true,
@@ -58,8 +62,14 @@ export async function endpointOai(
 					temperature: parameters?.temperature,
 					top_p: parameters?.top_p,
 					frequency_penalty: parameters?.repetition_penalty,
-				})
-			);
+				});
+				return openAICompletionToTextGenerationStream(result);
+			} catch (error) {
+				handleError(error, span, "Error during OpenAI Completions API Call");
+				throw error;
+			} finally {
+				if (span) span.end(); // Ensure to end the span if it wasn't ended in handleError
+			}
 		};
 	} else if (completion === "chat_completions") {
 		return async ({ messages, preprompt, generateSettings }) => {
@@ -77,9 +87,10 @@ export async function endpointOai(
 			}
 
 			const parameters = { ...model.parameters, ...generateSettings };
+			const span = apm.startSpan("OpenAI Chat Completions API Call");
 
-			return openAIChatToTextGenerationStream(
-				await openai.chat.completions.create({
+			try {
+				const result = await openai.chat.completions.create({
 					model: model.id ?? model.name,
 					messages: messagesOpenAI,
 					stream: true,
@@ -88,8 +99,14 @@ export async function endpointOai(
 					temperature: parameters?.temperature,
 					top_p: parameters?.top_p,
 					frequency_penalty: parameters?.repetition_penalty,
-				})
-			);
+				});
+				return openAIChatToTextGenerationStream(result);
+			} catch (error) {
+				handleError(error, span, "Error during OpenAI Chat Completions API Call");
+				throw error;
+			} finally {
+				if (span) span.end();
+			}
 		};
 	} else {
 		throw new Error("Invalid completion type");

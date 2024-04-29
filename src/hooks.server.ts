@@ -22,6 +22,10 @@ import { checkAndRunMigrations } from "$lib/migrations/migrations";
 import { building } from "$app/environment";
 import { refreshAssistantsCounts } from "$lib/assistantStats/refresh-assistants-counts";
 
+import apm from "$lib/server/apmSingleton";
+
+console.log("APM Started:\t", apm.isStarted());
+
 if (!building) {
 	await checkAndRunMigrations();
 	if (ENABLE_ASSISTANTS) {
@@ -30,9 +34,8 @@ if (!building) {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-	if (event.url.pathname.startsWith(`${base}/api/`) && EXPOSE_API !== "true") {
-		return new Response("API is disabled", { status: 403 });
-	}
+	const transactionName = `${event.request.method} ${event.url.pathname}`;
+	const transaction = apm.startTransaction(transactionName, "request");
 
 	function errorResponse(status: number, message: string) {
 		const sendJson =
@@ -44,6 +47,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 				"content-type": sendJson ? "application/json" : "text/plain",
 			},
 		});
+	}
+
+	if (event.url.pathname.startsWith(`${base}/api/`) && EXPOSE_API !== "true") {
+		return new Response("API is disabled", { status: 403 });
 	}
 
 	if (event.url.pathname.startsWith(`${base}/admin/`) || event.url.pathname === `${base}/admin`) {
@@ -83,6 +90,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	event.locals.sessionId = sessionId;
+	transaction.setLabel("sessionId", sessionId);
 
 	// CSRF protection
 	const requestContentType = event.request.headers.get("content-type")?.split(";")[0] ?? "";
@@ -169,6 +177,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 			return chunk.html.replace("%gaId%", PUBLIC_GOOGLE_ANALYTICS_ID);
 		},
 	});
+
+	transaction.end();
 
 	return response;
 };

@@ -34,6 +34,7 @@ git checkout itgpt/feature/mvp-v1
 ```
 
 ### Step 3: Start Docker, and run MongoDB Locally
+
 Ensure you have Docker installed and remember to start Docker.
 
 ```bash
@@ -48,10 +49,10 @@ touch .env.local
 
 Reach out to the IT Engineering team for the content of the `.env.local` file.
 
-### Step 5: Clear the database
+### Step 5: Clear the database [OPTIONAL]
 
 ```bash
-npm run populate users settings assistants conversations
+npm run populate reset
 ```
 
 ### Step 6: Run the app
@@ -76,7 +77,6 @@ A chat interface using open source models, eg OpenAssistant or Llama. It is a Sv
 4. [Text Embedding Models](#text-embedding-models)
 5. [Extra parameters](#extra-parameters)
 6. [Building](#building)
-
 
 ## Setup
 

@@ -4,7 +4,7 @@
 	export let createdByName: string | undefined;
 	export let avatar: string | undefined;
 
-	import logo from "../../../../../static/huggingchat/logo.svg?raw";
+	import logo from "../../../../../static/elasticgpt/logo.svg?raw";
 </script>
 
 <div class="flex h-full w-full flex-col items-center justify-center bg-black p-2">
