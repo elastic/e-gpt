@@ -8,7 +8,7 @@ import { uploadFile } from "@huggingface/hub";
 import parquet from "parquetjs";
 import { z } from "zod";
 
-// Triger like this:
+// Trigger like this:
 // curl -X POST "http://localhost:5173/chat/admin/export" -H "Authorization: Bearer <ADMIN_API_SECRET>" -H "Content-Type: application/json" -d '{"model": "OpenAssistant/oasst-sft-6-llama-30b-xor"}'
 
 export async function POST({ request }) {

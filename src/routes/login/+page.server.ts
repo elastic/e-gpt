@@ -3,6 +3,8 @@ import { getOIDCAuthorizationUrl } from "$lib/server/auth";
 import { base } from "$app/paths";
 import { ALTERNATIVE_REDIRECT_URLS } from "$env/static/private";
 
+import apm from "$lib/server/apmSingleton";
+
 export const actions = {
 	async default({ url, locals, request }) {
 		const referer = request.headers.get("referer");
@@ -10,18 +12,24 @@ export const actions = {
 
 		// TODO: Handle errors if provider is not responding
 
-		if (url.searchParams.has("callback")) {
-			const callback = url.searchParams.get("callback") || redirectURI;
-			if (ALTERNATIVE_REDIRECT_URLS.includes(callback)) {
-				redirectURI = callback;
+		const span = apm.startSpan("Generate OIDC Authorization URL");
+
+		try {
+			if (url.searchParams.has("callback")) {
+				const callback = url.searchParams.get("callback") || redirectURI;
+				if (ALTERNATIVE_REDIRECT_URLS.includes(callback)) {
+					redirectURI = callback;
+				}
 			}
+
+			const authorizationUrl = await getOIDCAuthorizationUrl(
+				{ redirectURI },
+				{ sessionId: locals.sessionId }
+			);
+
+			throw redirect(303, authorizationUrl);
+		} finally {
+			if (span) span.end();
 		}
-
-		const authorizationUrl = await getOIDCAuthorizationUrl(
-			{ redirectURI },
-			{ sessionId: locals.sessionId }
-		);
-
-		throw redirect(303, authorizationUrl);
 	},
 };

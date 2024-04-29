@@ -163,24 +163,12 @@ const addEndpoint = (m: Awaited<ReturnType<typeof processModel>>) => ({
 				switch (args.type) {
 					case "tgi":
 						return endpoints.tgi(args);
-					case "anthropic":
-						return endpoints.anthropic(args);
-					case "aws":
-						return await endpoints.aws(args);
 					case "openai":
 						return await endpoints.openai(args);
-					case "llamacpp":
-						return endpoints.llamacpp(args);
 					case "ollama":
 						return endpoints.ollama(args);
 					case "vertex":
 						return await endpoints.vertex(args);
-					case "cloudflare":
-						return await endpoints.cloudflare(args);
-					case "cohere":
-						return await endpoints.cohere(args);
-					case "langserve":
-						return await endpoints.langserve(args);
 					default:
 						// for legacy reason
 						return endpoints.tgi(args);

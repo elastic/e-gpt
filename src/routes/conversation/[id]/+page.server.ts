@@ -5,23 +5,29 @@ import { authCondition } from "$lib/server/auth";
 import { UrlDependency } from "$lib/types/UrlDependency";
 import { convertLegacyConversation } from "$lib/utils/tree/convertLegacyConversation.js";
 
+import apm from "$lib/server/apmSingleton";
+const spanTypeName = "+page_server_ts";
+
 export const load = async ({ params, depends, locals }) => {
+	const conversationSpan = apm.startSpan("Load Conversation", spanTypeName);
+	apm.setLabel("sessionID", locals.sessionId);
+	apm.setLabel("userEmail", locals.user?.email);
+
 	let conversation;
 	let shared = false;
 
-	// if the conver
 	if (params.id.length === 7) {
-		// shared link of length 7
 		conversation = await collections.sharedConversations.findOne({
 			_id: params.id,
 		});
 		shared = true;
 
 		if (!conversation) {
-			throw error(404, "Conversation not found");
+			const errorDetails = new Error("Conversation not found");
+			apm.captureError(errorDetails);
+			throw error(404, errorDetails.message);
 		}
 	} else {
-		// todo: add validation on params.id
 		conversation = await collections.conversations.findOne({
 			_id: new ObjectId(params.id),
 			...authCondition(locals),
@@ -36,17 +42,22 @@ export const load = async ({ params, depends, locals }) => {
 				})) !== 0;
 
 			if (conversationExists) {
-				throw error(
-					403,
+				const errorDetails = new Error(
 					"You don't have access to this conversation. If someone gave you this link, ask them to use the 'share' feature instead."
 				);
+				apm.captureError(errorDetails);
+				throw error(403, errorDetails.message);
 			}
 
-			throw error(404, "Conversation not found.");
+			const notFoundError = new Error("Conversation not found.");
+			apm.captureError(notFoundError);
+			throw error(404, notFoundError.message);
 		}
 	}
 
 	const convertedConv = { ...conversation, ...convertLegacyConversation(conversation) };
+
+	conversationSpan?.end();
 
 	return {
 		messages: convertedConv.messages,
