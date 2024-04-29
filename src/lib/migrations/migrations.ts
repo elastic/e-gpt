@@ -3,13 +3,21 @@ import { migrations } from "./routines";
 import { acquireLock, releaseLock, isDBLocked, refreshLock } from "./lock";
 import { isHuggingChat } from "$lib/utils/isHuggingChat";
 
+import apm from "$lib/server/apmSingleton";
+const spanTypeName = "migrations_ts";
+
 const LOCK_KEY = "migrations";
 
 export async function checkAndRunMigrations() {
+	const transaction = apm.startTransaction("CheckAndRunMigrations", "migrations");
+
+	const uniqueGUIDSpan = apm.startSpan("Check Unique GUIDs", spanTypeName);
 	// make sure all GUIDs are unique
 	if (new Set(migrations.map((m) => m._id.toString())).size !== migrations.length) {
+		apm.captureError(new Error("Duplicate migration GUIDs found."));
 		throw new Error("Duplicate migration GUIDs found.");
 	}
+	uniqueGUIDSpan?.end();
 
 	// check if all migrations have already been run
 	const migrationResults = await collections.migrationResults.find().toArray();
@@ -40,6 +48,9 @@ export async function checkAndRunMigrations() {
 	const refreshInterval = setInterval(async () => {
 		await refreshLock(LOCK_KEY, lockId);
 	}, 1000 * 10);
+
+	const iterateSpan = apm.startSpan("Iterate Migrations", spanTypeName);
+	iterateSpan?.setLabel("migrations_length", migrations.length.toString());
 
 	// iterate over all migrations
 	for (const migration of migrations) {
@@ -107,9 +118,12 @@ export async function checkAndRunMigrations() {
 			);
 		}
 	}
+	iterateSpan?.end();
 
 	console.log("[MIGRATIONS] All migrations applied. Releasing lock");
 
 	clearInterval(refreshInterval);
 	await releaseLock(LOCK_KEY, lockId);
+
+	transaction?.end();
 }
