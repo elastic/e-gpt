@@ -7,19 +7,7 @@ import { isMessageId } from "$lib/utils/tree/isMessageId";
 import { error } from "@sveltejs/kit";
 import { ObjectId } from "mongodb";
 
-import apm from "$lib/server/apmSingleton";
-const spanTypeName = "message_prompt_server_ts";
-
 export async function GET({ params, locals }) {
-	const getTransaction = apm.startTransaction(
-		"GET /conversation/[id]/message/[messageId]/prompt/+server",
-		"request"
-	);
-	apm.setLabel("sessionID", locals.sessionId);
-	apm.setLabel("userEmail", locals.user?.email);
-	apm.setLabel("conversationId", params.id);
-
-	const findConversationSpan = getTransaction.startSpan("Find Conversation", spanTypeName);
 	const conv =
 		params.id.length === 7
 			? await collections.sharedConversations.findOne({
@@ -31,12 +19,11 @@ export async function GET({ params, locals }) {
 			  });
 
 	if (conv === null) {
-		apm.captureError(new Error("Conversation not found"));
 		throw error(404, "Conversation not found");
 	}
-	findConversationSpan?.end();
 
 	const messageId = params.messageId;
+
 	const messageIndex = conv.messages.findIndex((msg) => msg.id === messageId);
 
 	if (!isMessageId(messageId) || messageIndex === -1) {
@@ -56,8 +43,6 @@ export async function GET({ params, locals }) {
 		messages: messagesUpTo,
 		model,
 	});
-
-	getTransaction.end();
 
 	return new Response(
 		JSON.stringify(

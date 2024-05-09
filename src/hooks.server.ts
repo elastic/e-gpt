@@ -1,17 +1,6 @@
-import {
-	ADMIN_API_SECRET,
-	COOKIE_NAME,
-	ENABLE_ASSISTANTS,
-	EXPOSE_API,
-	MESSAGES_BEFORE_LOGIN,
-	PARQUET_EXPORT_SECRET,
-} from "$env/static/private";
-import type { Handle } from "@sveltejs/kit";
-import {
-	PUBLIC_GOOGLE_ANALYTICS_ID,
-	PUBLIC_ORIGIN,
-	PUBLIC_APP_DISCLAIMER,
-} from "$env/static/public";
+import { env } from "$env/dynamic/private";
+import { env as envPublic } from "$env/dynamic/public";
+import type { Handle, HandleServerError } from "@sveltejs/kit";
 import { collections } from "$lib/server/database";
 import { base } from "$app/paths";
 import { findUser, refreshSessionCookie, requiresUser } from "$lib/server/auth";
@@ -21,21 +10,97 @@ import { addWeeks } from "date-fns";
 import { checkAndRunMigrations } from "$lib/migrations/migrations";
 import { building } from "$app/environment";
 import { refreshAssistantsCounts } from "$lib/assistantStats/refresh-assistants-counts";
-
-import apm from "$lib/server/apmSingleton";
+import { logger } from "$lib/server/logger";
+import { AbortedGenerations } from "$lib/server/abortedGenerations";
+import { MetricsServer } from "$lib/server/metrics";
+import apm from "$lib/server/apm";
 
 console.log("APM Started:\t", apm.isStarted());
 
+// TODO: move this code on a started server hook, instead of using a "building" flag
 if (!building) {
 	await checkAndRunMigrations();
-	if (ENABLE_ASSISTANTS) {
+	if (env.ENABLE_ASSISTANTS) {
 		refreshAssistantsCounts();
 	}
+
+	// Init metrics server
+	MetricsServer.getInstance();
+
+	// Init AbortedGenerations refresh process
+	AbortedGenerations.getInstance();
 }
 
+export const handleError: HandleServerError = async ({ error, event }) => {
+	// handle 404
+
+	if (building) {
+		throw error;
+	}
+
+	if (error instanceof Error || typeof error === "string") {
+		apm.captureError(error, {
+			custom: {
+				url: event.url.pathname,
+				params: event.params,
+			},
+		});
+	} else {
+		// Optionally handle unknown types here if necessary
+		apm.captureError("Unknown error type captured in handleError", {
+			custom: {
+				url: event.url.pathname,
+				params: event.params,
+				error: JSON.stringify(error),
+			},
+		});
+	}
+
+	if (event.route.id === null) {
+		return {
+			message: `Page ${event.url.pathname} not found`,
+		};
+	}
+
+	const errorId = crypto.randomUUID();
+
+	logger.error({
+		locals: event.locals,
+		url: event.request.url,
+		params: event.params,
+		request: event.request,
+		error,
+		errorId,
+	});
+
+	return {
+		message: "An error occurred",
+		errorId,
+	};
+};
+
 export const handle: Handle = async ({ event, resolve }) => {
-	const transactionName = `${event.request.method} ${event.url.pathname}`;
-	const transaction = apm.startTransaction(transactionName, "request");
+	const routeName = `${event.request.method} ${event.url.pathname}`;
+	const transaction = apm.startTransaction(routeName, "request");
+
+	transaction?.addLabels({
+		request_method: event.request.method,
+		request_url: event.url.pathname,
+		request_headers_accept: event.request.headers.get("accept") ?? "unknown",
+		request_headers_content_type: event.request.headers.get("content-type") ?? "unknown",
+	});
+
+	logger.debug({
+		locals: event.locals,
+		url: event.url.pathname,
+		params: event.params,
+		request: event.request,
+		txn: "START",
+	});
+
+	if (event.url.pathname.startsWith(`${base}/api/`) && env.EXPOSE_API !== "true") {
+		return new Response("API is disabled", { status: 403 });
+	}
 
 	function errorResponse(status: number, message: string) {
 		const sendJson =
@@ -49,12 +114,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 		});
 	}
 
-	if (event.url.pathname.startsWith(`${base}/api/`) && EXPOSE_API !== "true") {
-		return new Response("API is disabled", { status: 403 });
-	}
-
 	if (event.url.pathname.startsWith(`${base}/admin/`) || event.url.pathname === `${base}/admin`) {
-		const ADMIN_SECRET = ADMIN_API_SECRET || PARQUET_EXPORT_SECRET;
+		const ADMIN_SECRET = env.ADMIN_API_SECRET || env.PARQUET_EXPORT_SECRET;
 
 		if (!ADMIN_SECRET) {
 			return errorResponse(500, "Admin API is not configured");
@@ -65,7 +126,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 	}
 
-	const token = event.cookies.get(COOKIE_NAME);
+	const token = event.cookies.get(env.COOKIE_NAME);
 
 	let secretSessionId: string;
 	let sessionId: string;
@@ -90,7 +151,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	event.locals.sessionId = sessionId;
-	transaction.setLabel("sessionId", sessionId);
 
 	// CSRF protection
 	const requestContentType = event.request.headers.get("content-type")?.split(";")[0] ?? "";
@@ -105,18 +165,18 @@ export const handle: Handle = async ({ event, resolve }) => {
 		refreshSessionCookie(event.cookies, event.locals.sessionId);
 
 		if (nativeFormContentTypes.includes(requestContentType)) {
-			const referer = event.request.headers.get("referer");
+			const origin = event.request.headers.get("origin");
 
-			if (!referer) {
-				return errorResponse(403, "Non-JSON form requests need to have a referer");
+			if (!origin) {
+				return errorResponse(403, "Non-JSON form requests need to have an origin");
 			}
 
 			const validOrigins = [
-				new URL(event.request.url).origin,
-				...(PUBLIC_ORIGIN ? [new URL(PUBLIC_ORIGIN).origin] : []),
+				new URL(event.request.url).host,
+				...(envPublic.PUBLIC_ORIGIN ? [new URL(envPublic.PUBLIC_ORIGIN).host] : []),
 			];
 
-			if (!validOrigins.includes(new URL(referer).origin)) {
+			if (!validOrigins.includes(new URL(origin).host)) {
 				return errorResponse(403, "Invalid referer for POST request");
 			}
 		}
@@ -140,7 +200,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (
 			!event.locals.user &&
 			requiresUser &&
-			!((MESSAGES_BEFORE_LOGIN ? parseInt(MESSAGES_BEFORE_LOGIN) : 0) > 0)
+			!((env.MESSAGES_BEFORE_LOGIN ? parseInt(env.MESSAGES_BEFORE_LOGIN) : 0) > 0)
 		) {
 			return errorResponse(401, ERROR_MESSAGES.authOnly);
 		}
@@ -151,7 +211,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (
 			!requiresUser &&
 			!event.url.pathname.startsWith(`${base}/settings`) &&
-			!!PUBLIC_APP_DISCLAIMER
+			!!envPublic.PUBLIC_APP_DISCLAIMER
 		) {
 			const hasAcceptedEthicsModal = await collections.settings.countDocuments({
 				sessionId: event.locals.sessionId,
@@ -174,11 +234,32 @@ export const handle: Handle = async ({ event, resolve }) => {
 			}
 			replaced = true;
 
-			return chunk.html.replace("%gaId%", PUBLIC_GOOGLE_ANALYTICS_ID);
+			return chunk.html.replace("%gaId%", envPublic.PUBLIC_GOOGLE_ANALYTICS_ID);
 		},
 	});
 
-	transaction.end();
+	// Log locals as labels to the APM transaction
+	transaction?.setLabel("session_id", event.locals.sessionId);
+	transaction?.setLabel("user_email", event.locals.user?.email ?? "unknown");
+
+	// Set transaction outcome based on the status code
+	// 2xx and 3xx are considered successful for APM purposes
+	const responseStatus = response.status;
+	const isSuccess =
+		Math.floor(responseStatus / 100) === 2 || Math.floor(responseStatus / 100) === 3;
+	transaction?.setOutcome(isSuccess ? "success" : "failure");
+	transaction.result = String(response.status);
+
+	// End the APM transaction
+	transaction?.end();
+
+	logger.debug({
+		locals: event.locals,
+		url: event.url.pathname,
+		params: event.params,
+		request: event.request,
+		txn: "END",
+	});
 
 	return response;
 };

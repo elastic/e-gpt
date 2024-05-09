@@ -7,16 +7,7 @@ import { error } from "@sveltejs/kit";
 import { ObjectId } from "mongodb";
 import { nanoid } from "nanoid";
 
-import apm from "$lib/server/apmSingleton";
-const spanTypeName = "conversation_share_server_ts";
-
 export async function POST({ params, url, locals }) {
-	const postTransaction = apm.startTransaction("POST /conversation/[id]/share/+server", "request");
-	apm.setLabel("sessionID", locals.sessionId);
-	apm.setLabel("userEmail", locals.user?.email);
-	apm.setLabel("conversationId", params.id);
-
-	const findConversationSpan = postTransaction.startSpan("Find Conversation", spanTypeName);
 	const conversation = await collections.conversations.findOne({
 		_id: new ObjectId(params.id),
 		...authCondition(locals),
@@ -25,16 +16,12 @@ export async function POST({ params, url, locals }) {
 	if (!conversation) {
 		throw error(404, "Conversation not found");
 	}
-	findConversationSpan?.end();
 
-	const findHashSpan = postTransaction.startSpan("Find Hash Conversation", spanTypeName);
 	const hash = await hashConv(conversation);
 
 	const existingShare = await collections.sharedConversations.findOne({ hash });
-	findHashSpan?.end();
 
 	if (existingShare) {
-		postTransaction.end();
 		return new Response(
 			JSON.stringify({
 				url: getShareUrl(url, existingShare._id),
@@ -43,7 +30,6 @@ export async function POST({ params, url, locals }) {
 		);
 	}
 
-	const createShareSpan = postTransaction.startSpan("Create Shared Conversation", spanTypeName);
 	const shared: SharedConversation = {
 		_id: nanoid(7),
 		hash,
@@ -76,9 +62,6 @@ export async function POST({ params, url, locals }) {
 			downloadStream.pipe(uploadStream);
 		})
 	);
-	createShareSpan?.end();
-
-	postTransaction.end();
 
 	return new Response(
 		JSON.stringify({
