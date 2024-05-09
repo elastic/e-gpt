@@ -35,9 +35,6 @@ async function ensureIndexExists(index: string) {
 	if (!exists) {
 		await client.indices.create({ index });
 		console.log(`Created index: ${index}`);
-	} else {
-		// Delete existing index
-		console.log(`Index cleared: ${index}`);
 	}
 }
 
