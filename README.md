@@ -33,7 +33,13 @@ cd e-gpt
 git checkout itgpt/feature/mvp-v1
 ```
 
-### Step 3: Start Docker, and run MongoDB Locally
+### Step 3: Install npm packages
+
+```bash
+npm install
+```
+
+### Step 4: Start Docker, and run MongoDB Locally
 
 Ensure you have Docker installed and remember to start Docker.
 
@@ -41,7 +47,7 @@ Ensure you have Docker installed and remember to start Docker.
 docker run -d -p 27017:27017 --name mongo-elastic-gpt mongo:latest
 ```
 
-### Step 4: Create the `.env.local` file
+### Step 5: Create the `.env.local` file
 
 ```bash
 touch .env.local
@@ -49,13 +55,13 @@ touch .env.local
 
 Reach out to the IT Engineering team for the content of the `.env.local` file.
 
-### Step 5: Clear the database [OPTIONAL]
+### Step 6: Clear the database [OPTIONAL]
 
 ```bash
 npm run populate reset
 ```
 
-### Step 6: Run the app
+### Step 7: Run the app
 
 ```bash
 npm run dev

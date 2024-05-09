@@ -1,8 +1,6 @@
 import { models } from "$lib/server/models";
-import apm from "$lib/server/apmSingleton";
 
 export async function GET() {
-	const getTransaction = apm.startTransaction("GET /api/models/+server", "request");
 	const res = models
 		.filter((m) => m.unlisted == false)
 		.map((model) => ({
@@ -21,6 +19,5 @@ export async function GET() {
 			multimodal: model.multimodal ?? false,
 			unlisted: model.unlisted ?? false,
 		}));
-	getTransaction.end();
 	return Response.json(res);
 }

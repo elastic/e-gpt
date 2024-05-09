@@ -10,10 +10,6 @@ import { sha256 } from "$lib/utils/sha256";
 import { addWeeks } from "date-fns";
 import { OIDConfig } from "$lib/server/auth";
 
-import apm from "$lib/server/apmSingleton";
-
-const spanTypeName = "updateUser_ts";
-
 export async function updateUser(params: {
 	userData: UserinfoResponse;
 	locals: App.Locals;
@@ -28,7 +24,6 @@ export async function updateUser(params: {
 	if (!userData.preferred_username && userData.upn) {
 		userData.preferred_username = userData.upn as string;
 	}
-	const parseSpan = apm.startSpan("Parse User Data", spanTypeName);
 
 	const {
 		preferred_username: username,
@@ -60,17 +55,11 @@ export async function updateUser(params: {
 		name: string;
 	} & Record<string, string>;
 
-	parseSpan?.end();
-
 	// Dynamically access user data based on NAME_CLAIM from environment
 	// This approach allows us to adapt to different OIDC providers flexibly.
 
-	const existingUserSpan = apm.startSpan("Check Existing User", spanTypeName);
 	// check if user already exists
 	const existingUser = await collections.users.findOne({ hfUserId });
-	existingUserSpan?.end();
-
-	const sessionUpdateSpan = apm.startSpan("Update Session Info", spanTypeName);
 	let userId = existingUser?._id;
 
 	// update session cookie on login
@@ -83,11 +72,8 @@ export async function updateUser(params: {
 	}
 
 	locals.sessionId = sessionId;
-	sessionUpdateSpan?.end();
 
 	if (existingUser) {
-		const updateUserSpan = apm.startSpan("Update Existing User", spanTypeName);
-
 		// update existing user if any
 		await collections.users.updateOne(
 			{ _id: existingUser._id },
@@ -106,11 +92,7 @@ export async function updateUser(params: {
 			ip,
 			expiresAt: addWeeks(new Date(), 2),
 		});
-
-		updateUserSpan?.end();
 	} else {
-		const createUserSpan = apm.startSpan("Create New User", spanTypeName); // Span to monitor new user creation
-
 		// user doesn't exist yet, create a new one
 		const { insertedId } = await collections.users.insertOne({
 			_id: new ObjectId(),
@@ -155,17 +137,11 @@ export async function updateUser(params: {
 				...DEFAULT_SETTINGS,
 			});
 		}
-
-		createUserSpan?.end();
 	}
-
-	apm.setLabel("sessionId", locals.sessionId);
-	apm.setLabel("userEmail", email ?? existingUser?.email);
 
 	// refresh session cookie
 	refreshSessionCookie(cookies, secretSessionId);
 
-	const conversationMigrationSpan = apm.startSpan("Migrate Conversations", spanTypeName);
 	// migrate pre-existing conversations
 	await collections.conversations.updateMany(
 		{ sessionId: previousSessionId },
@@ -174,5 +150,4 @@ export async function updateUser(params: {
 			$unset: { sessionId: "" },
 		}
 	);
-	conversationMigrationSpan?.end();
 }

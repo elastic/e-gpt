@@ -10,7 +10,7 @@
 	import CarbonUserMultiple from "~icons/carbon/user-multiple";
 
 	import { share } from "$lib/utils/share";
-	import { PUBLIC_ORIGIN, PUBLIC_SHARE_PREFIX } from "$env/static/public";
+	import { env as envPublic } from "$env/dynamic/public";
 	import { page } from "$app/stores";
 
 	export let assistant: Pick<
@@ -35,7 +35,8 @@
 		(assistant?.rag?.allowedLinks?.length ?? 0) > 0 ||
 		assistant?.dynamicPrompt;
 
-	const prefix = PUBLIC_SHARE_PREFIX || `${PUBLIC_ORIGIN || $page.url.origin}${base}`;
+	const prefix =
+		envPublic.PUBLIC_SHARE_PREFIX || `${envPublic.PUBLIC_ORIGIN || $page.url.origin}${base}`;
 
 	$: shareUrl = `${prefix}/assistant/${assistant?._id}`;
 
@@ -59,7 +60,7 @@
 				/>
 			{:else}
 				<div
-					class="flex size-12 flex-none items-center justify-center rounded-full bg-gray-300 object-cover text-xl font-bold uppercase text-gray-500 max-sm:self-start sm:text-4xl md:size-32 dark:bg-gray-600"
+					class="flex size-12 flex-none items-center justify-center rounded-full bg-gray-300 object-cover text-xl font-bold uppercase text-gray-500 dark:bg-gray-600 max-sm:self-start sm:text-4xl md:size-32"
 				>
 					{assistant?.name[0]}
 				</div>
@@ -108,7 +109,7 @@
 		<div class="absolute right-3 top-3 md:right-4 md:top-4">
 			<div class="flex flex-row items-center gap-1">
 				<button
-					class="flex h-7 items-center gap-1.5 rounded-full border bg-white px-2.5 py-1 text-gray-800 shadow-sm hover:shadow-inner max-sm:px-1.5 md:text-sm dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300/90 dark:hover:bg-gray-800"
+					class="flex h-7 items-center gap-1.5 rounded-full border bg-white px-2.5 py-1 text-gray-800 shadow-sm hover:shadow-inner dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300/90 dark:hover:bg-gray-800 max-sm:px-1.5 md:text-sm"
 					on:click={() => {
 						if (!isCopied) {
 							share(shareUrl, assistant.name);
@@ -129,7 +130,7 @@
 				</button>
 				<a
 					href="{base}/settings/assistants/{assistant._id.toString()}"
-					class="flex h-7 items-center gap-1.5 rounded-full border bg-white px-2.5 py-1 text-gray-800 shadow-sm hover:shadow-inner md:text-sm dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300/90 dark:hover:bg-gray-800"
+					class="flex h-7 items-center gap-1.5 rounded-full border bg-white px-2.5 py-1 text-gray-800 shadow-sm hover:shadow-inner dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300/90 dark:hover:bg-gray-800 md:text-sm"
 					><IconGear class="text-xxs" />Settings</a
 				>
 			</div>
